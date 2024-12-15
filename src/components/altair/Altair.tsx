@@ -52,8 +52,6 @@ function AltairComponent() {
       systemInstruction: {
         parts: [
           {
-            // text: 'You are my helpful assistant. Any time I ask you for a graph call the "render_altair" function I have provided you. Dont ask for additional information just make your best judgement.',
-            // text: 'When I say "Hello" you should say "Good Afternoon"! If I say what you can see from the camera, you should say "I can see a home". Please follow these rules strictly!',
             text: 'You are my helpful assistant in Robotics. You have an assess to a robotic arm to help me. I will either show you which object you should pick and where to place or tell you. After the action, you should always tell me what you have tried to execute and was it "successful" or "failed".',
           },
         ],
