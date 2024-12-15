@@ -14,29 +14,30 @@
  * limitations under the License.
  */
 import { type FunctionDeclaration, SchemaType } from "@google/generative-ai";
-import { useEffect, useRef, useState, memo } from "react";
-import vegaEmbed from "vega-embed";
+import { useEffect } from "react";
 import { useLiveAPIContext } from "../../contexts/LiveAPIContext";
 import { ToolCall } from "../../multimodal-live-types";
 
-const declaration: FunctionDeclaration = {
-  name: "render_altair",
-  description: "Displays an altair graph in json format.",
+const pickAndPlaceFunction: FunctionDeclaration = {
+  name: "pick_and_place",
+  description: "Controls the ROARM-M2 to pick and place an object.",
   parameters: {
     type: SchemaType.OBJECT,
     properties: {
-      json_graph: {
-        type: SchemaType.STRING,
-        description:
-          "JSON STRING representation of the graph to render. Must be a string, not a json object",
-      },
+      target: { type: SchemaType.STRING, description: "Object to interact with" },
+      action: { type: SchemaType.STRING, description: "Action to perform: 'pick' or 'place'" },
     },
-    required: ["json_graph"],
+    required: ["target", "action"],
   },
 };
 
+const mockPickAndPlace = (target: string, action: string) => {
+  console.log(`Executing ${action} action on ${target}`);
+  return { success: false };
+};
+
+
 function AltairComponent() {
-  const [jsonString, setJSONString] = useState<string>("");
   const { client, setConfig } = useLiveAPIContext();
 
   useEffect(() => {
@@ -51,57 +52,51 @@ function AltairComponent() {
       systemInstruction: {
         parts: [
           {
-            text: 'You are my helpful assistant. Any time I ask you for a graph call the "render_altair" function I have provided you. Dont ask for additional information just make your best judgement.',
+            // text: 'You are my helpful assistant. Any time I ask you for a graph call the "render_altair" function I have provided you. Dont ask for additional information just make your best judgement.',
+            // text: 'When I say "Hello" you should say "Good Afternoon"! If I say what you can see from the camera, you should say "I can see a home". Please follow these rules strictly!',
+            text: 'You are my helpful assistant in Robotics. You have an assess to a robotic arm to help me. I will either show you which object you should pick and where to place or tell you. After the action, you should always tell me what you have tried to execute and was it "successful" or "failed".',
           },
         ],
       },
       tools: [
         // there is a free-tier quota for search
         { googleSearch: {} },
-        { functionDeclarations: [declaration] },
+        { functionDeclarations: [pickAndPlaceFunction] },
       ],
     });
   }, [setConfig]);
 
   useEffect(() => {
     const onToolCall = (toolCall: ToolCall) => {
-      console.log(`got toolcall`, toolCall);
-      const fc = toolCall.functionCalls.find(
-        (fc) => fc.name === declaration.name,
-      );
-      if (fc) {
-        const str = (fc.args as any).json_graph;
-        setJSONString(str);
-      }
-      // send data for the response of your tool call
-      // in this case Im just saying it was successful
-      if (toolCall.functionCalls.length) {
-        setTimeout(
-          () =>
-            client.sendToolResponse({
-              functionResponses: toolCall.functionCalls.map((fc) => ({
-                response: { output: { sucess: true } },
-                id: fc.id,
-              })),
-            }),
-          200,
-        );
+      const functionCall = toolCall.functionCalls.find(fc => fc.name === pickAndPlaceFunction.name);
+  
+      if (functionCall) {
+        // Extract arguments passed from Gemini
+        const { target, action } = functionCall.args as { target: string; action: string };
+  
+        // Call your function
+        const result = mockPickAndPlace(target, action);
+  
+        // Send the result back to Gemini
+        client.sendToolResponse({
+          functionResponses: [
+            {
+              response: result,
+              id: functionCall.id,
+            },
+          ],
+        });
       }
     };
+  
+    // Attach listener
     client.on("toolcall", onToolCall);
+  
+    // Cleanup on unmount
     return () => {
       client.off("toolcall", onToolCall);
     };
   }, [client]);
-
-  const embedRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (embedRef.current && jsonString) {
-      vegaEmbed(embedRef.current, JSON.parse(jsonString));
-    }
-  }, [embedRef, jsonString]);
-  return <div className="vega-embed" ref={embedRef} />;
 }
 
-export const Altair = memo(AltairComponent);
+export const Altair = AltairComponent as React.ComponentType<any>;
