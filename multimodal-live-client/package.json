@@ -1,0 +1,19 @@
+{
+  "name": "multimodal-live-client",
+  "version": "1.0.0",
+  "description": "A minimal web client for the Gemini 2.0 Flash Multimodal Live API using vanilla JavaScript, HTML, and CSS.",
+  "main": "src/js/app.js",
+  "scripts": {
+    "start": "live-server src",
+    "build": "echo 'Build step not defined'",
+    "test": "echo 'No tests defined'"
+  },
+  "dependencies": {
+    "lodash": "^4.17.21"
+  },
+  "devDependencies": {
+    "live-server": "^1.2.1"
+  },
+  "author": "Your Name",
+  "license": "MIT"
+}
