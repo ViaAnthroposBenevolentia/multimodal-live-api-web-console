@@ -20,6 +20,8 @@ import { Part } from "@google/generative-ai";
 import cn from "classnames";
 import { ReactNode } from "react";
 import { useLoggerStore } from "../../lib/store-logger";
+import SyntaxHighlighter from "react-syntax-highlighter";
+import { vs2015 as dark } from "react-syntax-highlighter/dist/esm/styles/hljs";
 import {
   ClientContentMessage,
   isClientContentMessage,
@@ -82,9 +84,35 @@ const AnyMessage = ({ message }: Message) => (
   <pre>{JSON.stringify(message, null, "  ")}</pre>
 );
 
+function tryParseCodeExecutionResult(output: string) {
+  try {
+    const json = JSON.parse(output);
+    return JSON.stringify(json, null, "  ");
+  } catch (e) {
+    return output;
+  }
+}
+
 const RenderPart = ({ part }: { part: Part }) =>
   part.text && part.text.length ? (
     <p className="part part-text">{part.text}</p>
+  ) : part.executableCode ? (
+    <div className="part part-executableCode">
+      <h5>executableCode: {part.executableCode.language}</h5>
+      <SyntaxHighlighter
+        language={part.executableCode.language.toLowerCase()}
+        style={dark}
+      >
+        {part.executableCode.code}
+      </SyntaxHighlighter>
+    </div>
+  ) : part.codeExecutionResult ? (
+    <div className="part part-codeExecutionResult">
+      <h5>codeExecutionResult: {part.codeExecutionResult.outcome}</h5>
+      <SyntaxHighlighter language="json" style={dark}>
+        {tryParseCodeExecutionResult(part.codeExecutionResult.output)}
+      </SyntaxHighlighter>
+    </div>
   ) : (
     <div className="part part-inlinedata">
       <h5>Inline Data: {part.inlineData?.mimeType}</h5>
@@ -118,7 +146,9 @@ const ToolCallLog = ({ message }: Message) => {
       {toolCall.functionCalls.map((fc, i) => (
         <div key={fc.id} className="part part-functioncall">
           <h5>Function call: {fc.name}</h5>
-          <pre>{JSON.stringify(fc, null, "  ")}</pre>
+          <SyntaxHighlighter language="json" style={dark}>
+            {JSON.stringify(fc, null, "  ")}
+          </SyntaxHighlighter>
         </div>
       ))}
     </div>
@@ -147,7 +177,9 @@ const ToolResponseLog = ({ message }: Message): JSX.Element => (
       (fc) => (
         <div key={`tool-response-${fc.id}`} className="part">
           <h5>Function Response: {fc.id}</h5>
-          <pre>{JSON.stringify(fc.response, null, "  ")}</pre>
+          <SyntaxHighlighter language="json" style={dark}>
+            {JSON.stringify(fc.response, null, "  ")}
+          </SyntaxHighlighter>
         </div>
       ),
     )}
