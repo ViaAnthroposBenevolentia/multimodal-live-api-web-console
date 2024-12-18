@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gemini 2.0 Flash Web Client</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <h1>Gemini 2.0 Flash Web Client</h1>
+      </header>
+
+      <main>
+        <div class="media-container">
+          <video id="videoElement" autoplay playsinline></video>
+          <div class="audio-visualizer" id="audioVisualizer"></div>
+        </div>
+
+        <div class="controls">
+          <button id="connectBtn" class="btn">Connect</button>
+          <button id="micBtn" class="btn">
+            <span class="icon">🎤</span>
+          </button>
+          <button id="cameraBtn" class="btn">
+            <span class="icon">📹</span>
+          </button>
+          <button id="screenShareBtn" class="btn">
+            <span class="icon">🖥️</span>
+          </button>
+        </div>
+
+        <div class="status-container">
+          <div id="connectionStatus" class="status">Disconnected</div>
+          <div id="streamStatus" class="status">Not Streaming</div>
+        </div>
+      </main>
+    </div>
+    <script type="module" src="js/script.js"></script>
+  </body>
+</html>
