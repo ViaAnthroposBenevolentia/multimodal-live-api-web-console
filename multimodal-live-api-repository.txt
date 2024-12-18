@@ -1,0 +1,2678 @@
+Purpose:
+--------
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+
+File Format:
+------------
+The content is organized as follows:
+1. This header section
+2. Repository structure
+3. Multiple file entries, each consisting of:
+  a. A separator line (================)
+  b. The file path (File: path/to/file)
+  c. Another separator line
+  d. The full contents of the file
+  e. A blank line
+
+================================================================
+Repository Structure
+================================================================
+src/
+  components/
+    altair/
+      Altair.tsx
+    audio-pulse/
+      AudioPulse.tsx
+    control-tray/
+      ControlTray.tsx
+    logger/
+      Logger.tsx
+      mock-logs.ts
+  contexts/
+    LiveAPIContext.tsx
+  hooks/
+    use-live-api.ts
+    use-media-stream-mux.ts
+    use-screen-capture.ts
+    use-webcam.ts
+  lib/
+    worklets/
+      audio-processing.ts
+      vol-meter.ts
+    audio-recorder.ts
+    audio-streamer.ts
+    audioworklet-registry.ts
+    multimodal-live-client.ts
+    store-logger.ts
+    utils.ts
+  App.tsx
+  index.tsx
+  multimodal-live-types.ts
+README.md
+
+================================================================
+Repository Files
+================================================================
+
+================
+File: README.md
+================
+# Multimodal Live API - Web console
+
+This repository contains a react-based starter app for using the [Multimodal Live API]([https://ai.google.dev/gemini-api](https://ai.google.dev/api/multimodal-live)) over a websocket. It provides modules for streaming audio playback, recording user media such as from a microphone, webcam or screen capture as well as a unified log view to aid in development of your application.
+
+This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+Project consists of:
+
+- an Event-emitting websocket-client to ease communication between the websocket and the front-end
+- communication layer for processing audio in and out
+- a boilerplate view for starting to build your apps and view logs
+
+================
+File: src/multimodal-live-types.ts
+================
+/**
+ * Copyright 2024 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import type {
+  Content,
+  FunctionCall,
+  GenerationConfig,
+  GenerativeContentBlob,
+  Part,
+  Tool,
+} from "@google/generative-ai";
+
+/**
+ * this module contains type-definitions and Type-Guards
+ */
+
+// Type-definitions
+
+/* outgoing types */
+
+/**
+ * the config to initiate the session
+ */
+export type LiveConfig = {
+  model: string;
+  systemInstruction?: { parts: Part[] };
+  generationConfig?: Partial<LiveGenerationConfig>;
+  tools?: Array<Tool | { googleSearch: {} } | { codeExecution: {} }>;
+};
+
+export type LiveGenerationConfig = GenerationConfig & {
+  responseModalities: "text" | "audio" | "image";
+  speechConfig?: {
+    voiceConfig?: {
+      prebuiltVoiceConfig?: {
+        voiceName: "Puck" | "Charon" | "Kore" | "Fenrir" | "Aoede" | string;
+      };
+    };
+  };
+};
+
+export type LiveOutgoingMessage =
+  | SetupMessage
+  | ClientContentMessage
+  | RealtimeInputMessage
+  | ToolResponseMessage;
+
+export type SetupMessage = {
+  setup: LiveConfig;
+};
+
+export type ClientContentMessage = {
+  clientContent: {
+    turns: Content[];
+    turnComplete: boolean;
+  };
+};
+
+export type RealtimeInputMessage = {
+  realtimeInput: {
+    mediaChunks: GenerativeContentBlob[];
+  };
+};
+
+export type ToolResponseMessage = {
+  toolResponse: {
+    functionResponses: LiveFunctionResponse[];
+  };
+};
+
+export type ToolResponse = ToolResponseMessage["toolResponse"];
+
+export type LiveFunctionResponse = {
+  response: object;
+  id: string;
+};
+
+/** Incoming types */
+
+export type LiveIncomingMessage =
+  | ToolCallCancellationMessage
+  | ToolCallMessage
+  | ServerContentMessage
+  | SetupCompleteMessage;
+
+export type SetupCompleteMessage = { setupComplete: {} };
+
+export type ServerContentMessage = {
+  serverContent: ServerContent;
+};
+
+export type ServerContent = ModelTurn | TurnComplete | Interrupted;
+
+export type ModelTurn = {
+  modelTurn: {
+    parts: Part[];
+  };
+};
+
+export type TurnComplete = { turnComplete: boolean };
+
+export type Interrupted = { interrupted: true };
+
+export type ToolCallCancellationMessage = {
+  toolCallCancellation: {
+    ids: string[];
+  };
+};
+
+export type ToolCallCancellation =
+  ToolCallCancellationMessage["toolCallCancellation"];
+
+export type ToolCallMessage = {
+  toolCall: ToolCall;
+};
+
+export type LiveFunctionCall = FunctionCall & {
+  id: string;
+};
+
+/**
+ * A `toolCall` message
+ */
+export type ToolCall = {
+  functionCalls: LiveFunctionCall[];
+};
+
+/** log types */
+export type StreamingLog = {
+  date: Date;
+  type: string;
+  count?: number;
+  message: string | LiveOutgoingMessage | LiveIncomingMessage;
+};
+
+// Type-Guards
+
+const prop = (a: any, prop: string, kind: string = "object") =>
+  typeof a === "object" && typeof a[prop] === "object";
+
+// outgoing messages
+export const isSetupMessage = (a: unknown): a is SetupMessage =>
+  prop(a, "setup");
+
+export const isClientContentMessage = (a: unknown): a is ClientContentMessage =>
+  prop(a, "clientContent");
+
+export const isRealtimeInputMessage = (a: unknown): a is RealtimeInputMessage =>
+  prop(a, "realtimeInput");
+
+export const isToolResponseMessage = (a: unknown): a is ToolResponseMessage =>
+  prop(a, "toolResponse");
+
+// incoming messages
+export const isSetupCompleteMessage = (a: unknown): a is SetupCompleteMessage =>
+  prop(a, "setupComplete");
+
+export const isServerContenteMessage = (a: any): a is ServerContentMessage =>
+  prop(a, "serverContent");
+
+export const isToolCallMessage = (a: any): a is ToolCallMessage =>
+  prop(a, "toolCall");
+
+export const isToolCallCancellationMessage = (
+  a: unknown,
+): a is ToolCallCancellationMessage =>
+  prop(a, "toolCallCancellation") &&
+  isToolCallCancellation((a as any).toolCallCancellation);
+
+export const isModelTurn = (a: any): a is ModelTurn =>
+  typeof (a as ModelTurn).modelTurn === "object";
+
+export const isTurnComplete = (a: any): a is TurnComplete =>
+  typeof (a as TurnComplete).turnComplete === "boolean";
+
+export const isInterrupted = (a: any): a is Interrupted =>
+  (a as Interrupted).interrupted;
+
+export function isToolCall(value: unknown): value is ToolCall {
+  if (!value || typeof value !== "object") return false;
+
+  const candidate = value as Record<string, unknown>;
+
+  return (
+    Array.isArray(candidate.functionCalls) &&
+    candidate.functionCalls.every((call) => isLiveFunctionCall(call))
+  );
+}
+
+export function isToolResponse(value: unknown): value is ToolResponse {
+  if (!value || typeof value !== "object") return false;
+
+  const candidate = value as Record<string, unknown>;
+
+  return (
+    Array.isArray(candidate.functionResponses) &&
+    candidate.functionResponses.every((resp) => isLiveFunctionResponse(resp))
+  );
+}
+
+export function isLiveFunctionCall(value: unknown): value is LiveFunctionCall {
+  if (!value || typeof value !== "object") return false;
+
+  const candidate = value as Record<string, unknown>;
+
+  return (
+    typeof candidate.name === "string" &&
+    typeof candidate.id === "string" &&
+    typeof candidate.args === "object" &&
+    candidate.args !== null
+  );
+}
+
+export function isLiveFunctionResponse(
+  value: unknown,
+): value is LiveFunctionResponse {
+  if (!value || typeof value !== "object") return false;
+
+  const candidate = value as Record<string, unknown>;
+
+  return (
+    typeof candidate.response === "object" && typeof candidate.id === "string"
+  );
+}
+
+export const isToolCallCancellation = (
+  a: unknown,
+): a is ToolCallCancellationMessage["toolCallCancellation"] =>
+  typeof a === "object" && Array.isArray((a as any).ids);
+
+================
+File: src/App.tsx
+================
+/**
+ * Copyright 2024 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import { useRef, useState } from "react";
+import "./App.scss";
+import { LiveAPIProvider } from "./contexts/LiveAPIContext";
+import SidePanel from "./components/side-panel/SidePanel";
+import { Altair } from "./components/altair/Altair";
+import ControlTray from "./components/control-tray/ControlTray";
+import cn from "classnames";
+
+const API_KEY = process.env.REACT_APP_GEMINI_API_KEY as string;
+if (typeof API_KEY !== "string") {
+  throw new Error("set REACT_APP_GEMINI_APIK_KEY in .env");
+}
+
+const host = "generativelanguage.googleapis.com";
+const uri = `wss://${host}/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent`;
+
+function App() {
+  // this video reference is used for displaying the active stream, whether that is the webcam or screen capture
+  // feel free to style as you see fit
+  const videoRef = useRef<HTMLVideoElement>(null);
+  // either the screen capture, the video or null, if null we hide it
+  const [videoStream, setVideoStream] = useState<MediaStream | null>(null);
+
+  return (
+    <div className="App">
+      <LiveAPIProvider url={uri} apiKey={API_KEY}>
+        <div className="streaming-console">
+          <SidePanel />
+          <main>
+            <div className="main-app-area">
+              {/* APP goes here */}
+              <Altair />
+              <video
+                className={cn("stream", {
+                  hidden: !videoRef.current || !videoStream,
+                })}
+                ref={videoRef}
+                autoPlay
+                playsInline
+              />
+            </div>
+
+            <ControlTray
+              videoRef={videoRef}
+              supportsVideo={true}
+              onVideoStreamChange={setVideoStream}
+            >
+              {/* put your own buttons here */}
+            </ControlTray>
+          </main>
+        </div>
+      </LiveAPIProvider>
+    </div>
+  );
+}
+
+export default App;
+
+================
+File: src/index.tsx
+================
+/**
+ * Copyright 2024 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import './index.css';
+import App from './App';
+import reportWebVitals from './reportWebVitals';
+
+const root = ReactDOM.createRoot(
+  document.getElementById('root') as HTMLElement
+);
+root.render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);
+
+// If you want to start measuring performance in your app, pass a function
+// to log results (for example: reportWebVitals(console.log))
+// or send to an analytics endpoint. Learn more: https://bit.ly/CRA-vitals
+reportWebVitals();
+
+================
+File: src/contexts/LiveAPIContext.tsx
+================
+/**
+ * Copyright 2024 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import { createContext, FC, ReactNode, useContext } from "react";
+import { useLiveAPI, UseLiveAPIResults } from "../hooks/use-live-api";
+
+const LiveAPIContext = createContext<UseLiveAPIResults | undefined>(undefined);
+
+export type LiveAPIProviderProps = {
+  children: ReactNode;
+  url?: string;
+  apiKey: string;
+};
+
+export const LiveAPIProvider: FC<LiveAPIProviderProps> = ({
+  url,
+  apiKey,
+  children,
+}) => {
+  const liveAPI = useLiveAPI({ url, apiKey });
+
+  return (
+    <LiveAPIContext.Provider value={liveAPI}>
+      {children}
+    </LiveAPIContext.Provider>
+  );
+};
+
+export const useLiveAPIContext = () => {
+  const context = useContext(LiveAPIContext);
+  if (!context) {
+    throw new Error("useLiveAPIContext must be used wihin a LiveAPIProvider");
+  }
+  return context;
+};
+
+================
+File: src/hooks/use-screen-capture.ts
+================
+/**
+ * Copyright 2024 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import { useState, useEffect } from "react";
+import { UseMediaStreamResult } from "./use-media-stream-mux";
+
+export function useScreenCapture(): UseMediaStreamResult {
+  const [stream, setStream] = useState<MediaStream | null>(null);
+  const [isStreaming, setIsStreaming] = useState(false);
+
+  useEffect(() => {
+    const handleStreamEnded = () => {
+      setIsStreaming(false);
+      setStream(null);
+    };
+    if (stream) {
+      stream
+        .getTracks()
+        .forEach((track) => track.addEventListener("ended", handleStreamEnded));
+      return () => {
+        stream
+          .getTracks()
+          .forEach((track) =>
+            track.removeEventListener("ended", handleStreamEnded),
+          );
+      };
+    }
+  }, [stream]);
+
+  const start = async () => {
+    // const controller = new CaptureController();
+    // controller.setFocusBehavior("no-focus-change");
+    const mediaStream = await navigator.mediaDevices.getDisplayMedia({
+      video: true,
+      // controller
+    });
+    setStream(mediaStream);
+    setIsStreaming(true);
+    return mediaStream;
+  };
+
+  const stop = () => {
+    if (stream) {
+      stream.getTracks().forEach((track) => track.stop());
+      setStream(null);
+      setIsStreaming(false);
+    }
+  };
+
+  const result: UseMediaStreamResult = {
+    type: "screen",
+    start,
+    stop,
+    isStreaming,
+    stream,
+  };
+
+  return result;
+}
+
+================
+File: src/hooks/use-live-api.ts
+================
+/**
+ * Copyright 2024 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  MultimodalLiveAPIClientConnection,
+  MultimodalLiveClient,
+} from "../lib/multimodal-live-client";
+import { LiveConfig } from "../multimodal-live-types";
+import { AudioStreamer } from "../lib/audio-streamer";
+import { audioContext } from "../lib/utils";
+import VolMeterWorket from "../lib/worklets/vol-meter";
+
+export type UseLiveAPIResults = {
+  client: MultimodalLiveClient;
+  setConfig: (config: LiveConfig) => void;
+  config: LiveConfig;
+  connected: boolean;
+  connect: () => Promise<void>;
+  disconnect: () => Promise<void>;
+  volume: number;
+};
+
+export function useLiveAPI({
+  url,
+  apiKey,
+}: MultimodalLiveAPIClientConnection): UseLiveAPIResults {
+  const client = useMemo(
+    () => new MultimodalLiveClient({ url, apiKey }),
+    [url, apiKey],
+  );
+  const audioStreamerRef = useRef<AudioStreamer | null>(null);
+
+  const [connected, setConnected] = useState(false);
+  const [config, setConfig] = useState<LiveConfig>({
+    model: "models/gemini-2.0-flash-exp",
+  });
+  const [volume, setVolume] = useState(0);
+
+  // register audio for streaming server -> speakers
+  useEffect(() => {
+    if (!audioStreamerRef.current) {
+      audioContext({ id: "audio-out" }).then((audioCtx: AudioContext) => {
+        audioStreamerRef.current = new AudioStreamer(audioCtx);
+        audioStreamerRef.current
+          .addWorklet<any>("vumeter-out", VolMeterWorket, (ev: any) => {
+            setVolume(ev.data.volume);
+          })
+          .then(() => {
+            // Successfully added worklet
+          });
+      });
+    }
+  }, [audioStreamerRef]);
+
+  useEffect(() => {
+    const onClose = () => {
+      setConnected(false);
+    };
+
+    const stopAudioStreamer = () => audioStreamerRef.current?.stop();
+
+    const onAudio = (data: ArrayBuffer) =>
+      audioStreamerRef.current?.addPCM16(new Uint8Array(data));
+
+    client
+      .on("close", onClose)
+      .on("interrupted", stopAudioStreamer)
+      .on("audio", onAudio);
+
+    return () => {
+      client
+        .off("close", onClose)
+        .off("interrupted", stopAudioStreamer)
+        .off("audio", onAudio);
+    };
+  }, [client]);
+
+  const connect = useCallback(async () => {
+    console.log(config);
+    if (!config) {
+      throw new Error("config has not been set");
+    }
+    client.disconnect();
+    await client.connect(config);
+    setConnected(true);
+  }, [client, setConnected, config]);
+
+  const disconnect = useCallback(async () => {
+    client.disconnect();
+    setConnected(false);
+  }, [setConnected, client]);
+
+  return {
+    client,
+    config,
+    setConfig,
+    connected,
+    connect,
+    disconnect,
+    volume,
+  };
+}
+
+================
+File: src/hooks/use-media-stream-mux.ts
+================
+/**
+ * Copyright 2024 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+export type UseMediaStreamResult = {
+  type: "webcam" | "screen";
+  start: () => Promise<MediaStream>;
+  stop: () => void;
+  isStreaming: boolean;
+  stream: MediaStream | null;
+};
+
+================
+File: src/hooks/use-webcam.ts
+================
+/**
+ * Copyright 2024 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import { useState, useEffect } from "react";
+import { UseMediaStreamResult } from "./use-media-stream-mux";
+
+export function useWebcam(): UseMediaStreamResult {
+  const [stream, setStream] = useState<MediaStream | null>(null);
+  const [isStreaming, setIsStreaming] = useState(false);
+
+  useEffect(() => {
+    const handleStreamEnded = () => {
+      setIsStreaming(false);
+      setStream(null);
+    };
+    if (stream) {
+      stream
+        .getTracks()
+        .forEach((track) => track.addEventListener("ended", handleStreamEnded));
+      return () => {
+        stream
+          .getTracks()
+          .forEach((track) =>
+            track.removeEventListener("ended", handleStreamEnded),
+          );
+      };
+    }
+  }, [stream]);
+
+  const start = async () => {
+    const mediaStream = await navigator.mediaDevices.getUserMedia({
+      video: true,
+    });
+    setStream(mediaStream);
+    setIsStreaming(true);
+    return mediaStream;
+  };
+
+  const stop = () => {
+    if (stream) {
+      stream.getTracks().forEach((track) => track.stop());
+      setStream(null);
+      setIsStreaming(false);
+    }
+  };
+
+  const result: UseMediaStreamResult = {
+    type: "webcam",
+    start,
+    stop,
+    isStreaming,
+    stream,
+  };
+
+  return result;
+}
+
+================
+File: src/components/altair/Altair.tsx
+================
+/**
+ * Copyright 2024 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+import { type FunctionDeclaration, SchemaType } from "@google/generative-ai";
+import { useEffect, useRef, useState, memo } from "react";
+import vegaEmbed from "vega-embed";
+import { useLiveAPIContext } from "../../contexts/LiveAPIContext";
+import { ToolCall } from "../../multimodal-live-types";
+
+const declaration: FunctionDeclaration = {
+  name: "render_altair",
+  description: "Displays an altair graph in json format.",
+  parameters: {
+    type: SchemaType.OBJECT,
+    properties: {
+      json_graph: {
+        type: SchemaType.STRING,
+        description:
+          "JSON STRING representation of the graph to render. Must be a string, not a json object",
+      },
+    },
+    required: ["json_graph"],
+  },
+};
+
+function AltairComponent() {
+  const [jsonString, setJSONString] = useState<string>("");
+  const { client, setConfig } = useLiveAPIContext();
+
+  useEffect(() => {
+    setConfig({
+      model: "models/gemini-2.0-flash-exp",
+      generationConfig: {
+        responseModalities: "audio",
+        speechConfig: {
+          voiceConfig: { prebuiltVoiceConfig: { voiceName: "Aoede" } },
+        },
+      },
+      systemInstruction: {
+        parts: [
+          {
+            text: 'You are my helpful assistant. Any time I ask you for a graph call the "render_altair" function I have provided you. Dont ask for additional information just make your best judgement.',
+          },
+        ],
+      },
+      tools: [
+        // there is a free-tier quota for search
+        { googleSearch: {} },
+        { functionDeclarations: [declaration] },
+      ],
+    });
+  }, [setConfig]);
+
+  useEffect(() => {
+    const onToolCall = (toolCall: ToolCall) => {
+      console.log(`got toolcall`, toolCall);
+      const fc = toolCall.functionCalls.find(
+        (fc) => fc.name === declaration.name,
+      );
+      if (fc) {
+        const str = (fc.args as any).json_graph;
+        setJSONString(str);
+      }
+      // send data for the response of your tool call
+      // in this case Im just saying it was successful
+      if (toolCall.functionCalls.length) {
+        setTimeout(
+          () =>
+            client.sendToolResponse({
+              functionResponses: toolCall.functionCalls.map((fc) => ({
+                response: { output: { sucess: true } },
+                id: fc.id,
+              })),
+            }),
+          200,
+        );
+      }
+    };
+    client.on("toolcall", onToolCall);
+    return () => {
+      client.off("toolcall", onToolCall);
+    };
+  }, [client]);
+
+  const embedRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (embedRef.current && jsonString) {
+      vegaEmbed(embedRef.current, JSON.parse(jsonString));
+    }
+  }, [embedRef, jsonString]);
+  return <div className="vega-embed" ref={embedRef} />;
+}
+
+export const Altair = memo(AltairComponent);
+
+================
+File: src/components/audio-pulse/AudioPulse.tsx
+================
+/**
+ * Copyright 2024 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import "./audio-pulse.scss";
+import React from "react";
+import { useEffect, useRef } from "react";
+import c from "classnames";
+
+const lineCount = 3;
+
+export type AudioPulseProps = {
+  active: boolean;
+  volume: number;
+  hover?: boolean;
+};
+
+export default function AudioPulse({ active, volume, hover }: AudioPulseProps) {
+  const lines = useRef<HTMLDivElement[]>([]);
+
+  useEffect(() => {
+    let timeout: number | null = null;
+    const update = () => {
+      lines.current.forEach(
+        (line, i) =>
+        (line.style.height = `${Math.min(
+          24,
+          4 + volume * (i === 1 ? 400 : 60),
+        )}px`),
+      );
+      timeout = window.setTimeout(update, 100);
+    };
+
+    update();
+
+    return () => clearTimeout((timeout as number)!);
+  }, [volume]);
+
+  return (
+    <div className={c("audioPulse", { active, hover })}>
+      {Array(lineCount)
+        .fill(null)
+        .map((_, i) => (
+          <div
+            key={i}
+            ref={(el) => (lines.current[i] = el!)}
+            style={{ animationDelay: `${i * 133}ms` }}
+          />
+        ))}
+    </div>
+  );
+}
+
+================
+File: src/components/logger/mock-logs.ts
+================
+/**
+ * Copyright 2024 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/**
+ * this module is just mock data, intended to make it easier to develop and style the logger
+ */
+import type { StreamingLog } from "../../multimodal-live-types";
+
+const soundLogs = (n: number): StreamingLog[] =>
+  new Array(n).fill(0).map(
+    (): StreamingLog => ({
+      date: new Date(),
+      type: "server.audio",
+      message: "buffer (11250)",
+    }),
+  );
+//
+const realtimeLogs = (n: number): StreamingLog[] =>
+  new Array(n).fill(0).map(
+    (): StreamingLog => ({
+      date: new Date(),
+      type: "client.realtimeInput",
+      message: "audio",
+    }),
+  );
+
+export const mockLogs: StreamingLog[] = [
+  {
+    date: new Date(),
+    type: "client.open",
+    message: "connected to socket",
+  },
+  ...realtimeLogs(10),
+  ...soundLogs(10),
+  {
+    date: new Date(),
+    type: "receive.content",
+    message: {
+      serverContent: {
+        interrupted: true,
+      },
+    },
+  },
+  {
+    date: new Date(),
+    type: "receive.content",
+    message: {
+      serverContent: {
+        turnComplete: true,
+      },
+    },
+  },
+  //this one is just a string
+  // {
+  //   date: new Date(),
+  //   type: "server.send",
+  //   message: {
+  //     serverContent: {
+  //       turnComplete: true,
+  //     },
+  //   },
+  // },
+  ...realtimeLogs(10),
+  ...soundLogs(20),
+  {
+    date: new Date(),
+    type: "receive.content",
+    message: {
+      serverContent: {
+        modelTurn: {
+          parts: [{ text: "Hey its text" }, { text: "more" }],
+        },
+      },
+    },
+  },
+  {
+    date: new Date(),
+    type: "client.send",
+    message: {
+      clientContent: {
+        turns: [
+          {
+            role: "User",
+            parts: [
+              {
+                text: "How much wood could a woodchuck chuck if a woodchuck could chuck wood",
+              },
+            ],
+          },
+        ],
+        turnComplete: true,
+      },
+    },
+  },
+  {
+    date: new Date(),
+    type: "server.toolCall",
+    message: {
+      toolCall: {
+        functionCalls: [
+          {
+            id: "akadjlasdfla-askls",
+            name: "take_photo",
+            args: {},
+          },
+          {
+            id: "akldjsjskldsj-102",
+            name: "move_camera",
+            args: { x: 20, y: 4 },
+          },
+        ],
+      },
+    },
+  },
+  {
+    date: new Date(),
+    type: "server.toolCallCancellation",
+    message: {
+      toolCallCancellation: {
+        ids: ["akladfjadslfk", "adkafsdljfsdk"],
+      },
+    },
+  },
+  {
+    date: new Date(),
+    type: "client.toolResponse",
+    message: {
+      toolResponse: {
+        functionResponses: [
+          {
+            response: { success: true },
+            id: "akslaj-10102",
+          },
+        ],
+      },
+    },
+  },
+];
+
+================
+File: src/components/logger/Logger.tsx
+================
+/**
+ * Copyright 2024 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import "./logger.scss";
+
+import { Part } from "@google/generative-ai";
+import cn from "classnames";
+import { ReactNode } from "react";
+import { useLoggerStore } from "../../lib/store-logger";
+import SyntaxHighlighter from "react-syntax-highlighter";
+import { vs2015 as dark } from "react-syntax-highlighter/dist/esm/styles/hljs";
+import {
+  ClientContentMessage,
+  isClientContentMessage,
+  isInterrupted,
+  isModelTurn,
+  isServerContenteMessage,
+  isToolCallCancellationMessage,
+  isToolCallMessage,
+  isToolResponseMessage,
+  isTurnComplete,
+  ModelTurn,
+  ServerContentMessage,
+  StreamingLog,
+  ToolCallCancellationMessage,
+  ToolCallMessage,
+  ToolResponseMessage,
+} from "../../multimodal-live-types";
+
+const formatTime = (d: Date) => d.toLocaleTimeString().slice(0, -3);
+
+const LogEntry = ({
+  log,
+  MessageComponent,
+}: {
+  log: StreamingLog;
+  MessageComponent: ({
+    message,
+  }: {
+    message: StreamingLog["message"];
+  }) => ReactNode;
+}): JSX.Element => (
+  <li
+    className={cn(
+      `plain-log`,
+      `source-${log.type.slice(0, log.type.indexOf("."))}`,
+      {
+        receive: log.type.includes("receive"),
+        send: log.type.includes("send"),
+      },
+    )}
+  >
+    <span className="timestamp">{formatTime(log.date)}</span>
+    <span className="source">{log.type}</span>
+    <span className="message">
+      <MessageComponent message={log.message} />
+    </span>
+    {log.count && <span className="count">{log.count}</span>}
+  </li>
+);
+
+const PlainTextMessage = ({
+  message,
+}: {
+  message: StreamingLog["message"];
+}) => <span>{message as string}</span>;
+
+type Message = { message: StreamingLog["message"] };
+
+const AnyMessage = ({ message }: Message) => (
+  <pre>{JSON.stringify(message, null, "  ")}</pre>
+);
+
+function tryParseCodeExecutionResult(output: string) {
+  try {
+    const json = JSON.parse(output);
+    return JSON.stringify(json, null, "  ");
+  } catch (e) {
+    return output;
+  }
+}
+
+const RenderPart = ({ part }: { part: Part }) =>
+  part.text && part.text.length ? (
+    <p className="part part-text">{part.text}</p>
+  ) : part.executableCode ? (
+    <div className="part part-executableCode">
+      <h5>executableCode: {part.executableCode.language}</h5>
+      <SyntaxHighlighter
+        language={part.executableCode.language.toLowerCase()}
+        style={dark}
+      >
+        {part.executableCode.code}
+      </SyntaxHighlighter>
+    </div>
+  ) : part.codeExecutionResult ? (
+    <div className="part part-codeExecutionResult">
+      <h5>codeExecutionResult: {part.codeExecutionResult.outcome}</h5>
+      <SyntaxHighlighter language="json" style={dark}>
+        {tryParseCodeExecutionResult(part.codeExecutionResult.output)}
+      </SyntaxHighlighter>
+    </div>
+  ) : (
+    <div className="part part-inlinedata">
+      <h5>Inline Data: {part.inlineData?.mimeType}</h5>
+    </div>
+  );
+
+const ClientContentLog = ({ message }: Message) => {
+  const { turns, turnComplete } = (message as ClientContentMessage)
+    .clientContent;
+  return (
+    <div className="rich-log client-content user">
+      <h4 className="roler-user">User</h4>
+      {turns.map((turn, i) => (
+        <div key={`message-turn-${i}`}>
+          {turn.parts
+            .filter((part) => !(part.text && part.text === "\n"))
+            .map((part, j) => (
+              <RenderPart part={part} key={`message-turh-${i}-part-${j}`} />
+            ))}
+        </div>
+      ))}
+      {!turnComplete ? <span>turnComplete: false</span> : ""}
+    </div>
+  );
+};
+
+const ToolCallLog = ({ message }: Message) => {
+  const { toolCall } = message as ToolCallMessage;
+  return (
+    <div className={cn("rich-log tool-call")}>
+      {toolCall.functionCalls.map((fc, i) => (
+        <div key={fc.id} className="part part-functioncall">
+          <h5>Function call: {fc.name}</h5>
+          <SyntaxHighlighter language="json" style={dark}>
+            {JSON.stringify(fc, null, "  ")}
+          </SyntaxHighlighter>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+const ToolCallCancellationLog = ({ message }: Message): JSX.Element => (
+  <div className={cn("rich-log tool-call-cancellation")}>
+    <span>
+      {" "}
+      ids:{" "}
+      {(message as ToolCallCancellationMessage).toolCallCancellation.ids.map(
+        (id) => (
+          <span className="inline-code" key={`cancel-${id}`}>
+            "{id}"
+          </span>
+        ),
+      )}
+    </span>
+  </div>
+);
+
+const ToolResponseLog = ({ message }: Message): JSX.Element => (
+  <div className={cn("rich-log tool-response")}>
+    {(message as ToolResponseMessage).toolResponse.functionResponses.map(
+      (fc) => (
+        <div key={`tool-response-${fc.id}`} className="part">
+          <h5>Function Response: {fc.id}</h5>
+          <SyntaxHighlighter language="json" style={dark}>
+            {JSON.stringify(fc.response, null, "  ")}
+          </SyntaxHighlighter>
+        </div>
+      ),
+    )}
+  </div>
+);
+
+const ModelTurnLog = ({ message }: Message): JSX.Element => {
+  const serverContent = (message as ServerContentMessage).serverContent;
+  const { modelTurn } = serverContent as ModelTurn;
+  const { parts } = modelTurn;
+
+  return (
+    <div className="rich-log model-turn model">
+      <h4 className="role-model">Model</h4>
+      {parts
+        .filter((part) => !(part.text && part.text === "\n"))
+        .map((part, j) => (
+          <RenderPart part={part} key={`model-turn-part-${j}`} />
+        ))}
+    </div>
+  );
+};
+
+const CustomPlainTextLog = (msg: string) => () => (
+  <PlainTextMessage message={msg} />
+);
+
+export type LoggerFilterType = "conversations" | "tools" | "none";
+
+export type LoggerProps = {
+  filter: LoggerFilterType;
+};
+
+const filters: Record<LoggerFilterType, (log: StreamingLog) => boolean> = {
+  tools: (log: StreamingLog) =>
+    isToolCallMessage(log.message) ||
+    isToolResponseMessage(log.message) ||
+    isToolCallCancellationMessage(log.message),
+  conversations: (log: StreamingLog) =>
+    isClientContentMessage(log.message) || isServerContenteMessage(log.message),
+  none: () => true,
+};
+
+const component = (log: StreamingLog) => {
+  if (typeof log.message === "string") {
+    return PlainTextMessage;
+  }
+  if (isClientContentMessage(log.message)) {
+    return ClientContentLog;
+  }
+  if (isToolCallMessage(log.message)) {
+    return ToolCallLog;
+  }
+  if (isToolCallCancellationMessage(log.message)) {
+    return ToolCallCancellationLog;
+  }
+  if (isToolResponseMessage(log.message)) {
+    return ToolResponseLog;
+  }
+  if (isServerContenteMessage(log.message)) {
+    const { serverContent } = log.message;
+    if (isInterrupted(serverContent)) {
+      return CustomPlainTextLog("interrupted");
+    }
+    if (isTurnComplete(serverContent)) {
+      return CustomPlainTextLog("turnComplete");
+    }
+    if (isModelTurn(serverContent)) {
+      return ModelTurnLog;
+    }
+  }
+  return AnyMessage;
+};
+
+export default function Logger({ filter = "none" }: LoggerProps) {
+  const { logs } = useLoggerStore();
+
+  const filterFn = filters[filter];
+
+  return (
+    <div className="logger">
+      <ul className="logger-list">
+        {logs.filter(filterFn).map((log, key) => {
+          return (
+            <LogEntry MessageComponent={component(log)} log={log} key={key} />
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+================
+File: src/components/control-tray/ControlTray.tsx
+================
+/**
+ * Copyright 2024 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import cn from "classnames";
+
+import { memo, ReactNode, RefObject, useEffect, useRef, useState } from "react";
+import { useLiveAPIContext } from "../../contexts/LiveAPIContext";
+import { UseMediaStreamResult } from "../../hooks/use-media-stream-mux";
+import { useScreenCapture } from "../../hooks/use-screen-capture";
+import { useWebcam } from "../../hooks/use-webcam";
+import { AudioRecorder } from "../../lib/audio-recorder";
+import AudioPulse from "../audio-pulse/AudioPulse";
+import "./control-tray.scss";
+
+export type ControlTrayProps = {
+  videoRef: RefObject<HTMLVideoElement>;
+  children?: ReactNode;
+  supportsVideo: boolean;
+  onVideoStreamChange?: (stream: MediaStream | null) => void;
+};
+
+type MediaStreamButtonProps = {
+  isStreaming: boolean;
+  onIcon: string;
+  offIcon: string;
+  start: () => Promise<any>;
+  stop: () => any;
+};
+
+/**
+ * button used for triggering webcam or screen-capture
+ */
+const MediaStreamButton = memo(
+  ({ isStreaming, onIcon, offIcon, start, stop }: MediaStreamButtonProps) =>
+    isStreaming ? (
+      <button className="action-button" onClick={stop}>
+        <span className="material-symbols-outlined">{onIcon}</span>
+      </button>
+    ) : (
+      <button className="action-button" onClick={start}>
+        <span className="material-symbols-outlined">{offIcon}</span>
+      </button>
+    ),
+);
+
+function ControlTray({
+  videoRef,
+  children,
+  onVideoStreamChange = () => {},
+  supportsVideo,
+}: ControlTrayProps) {
+  const videoStreams = [useWebcam(), useScreenCapture()];
+  const [activeVideoStream, setActiveVideoStream] =
+    useState<MediaStream | null>(null);
+  const [webcam, screenCapture] = videoStreams;
+  const [inVolume, setInVolume] = useState(0);
+  const [audioRecorder] = useState(() => new AudioRecorder());
+  const [muted, setMuted] = useState(false);
+  const renderCanvasRef = useRef<HTMLCanvasElement>(null);
+  const connectButtonRef = useRef<HTMLButtonElement>(null);
+
+  const { client, connected, connect, disconnect, volume } =
+    useLiveAPIContext();
+
+  useEffect(() => {
+    if (!connected && connectButtonRef.current) {
+      connectButtonRef.current.focus();
+    }
+  }, [connected]);
+  useEffect(() => {
+    document.documentElement.style.setProperty(
+      "--volume",
+      `${Math.max(5, Math.min(inVolume * 200, 8))}px`,
+    );
+  }, [inVolume]);
+
+  useEffect(() => {
+    const onData = (base64: string) => {
+      client.sendRealtimeInput([
+        {
+          mimeType: "audio/pcm;rate=16000",
+          data: base64,
+        },
+      ]);
+    };
+    if (connected && !muted && audioRecorder) {
+      audioRecorder.on("data", onData).on("volume", setInVolume).start();
+    } else {
+      audioRecorder.stop();
+    }
+    return () => {
+      audioRecorder.off("data", onData).off("volume", setInVolume);
+    };
+  }, [connected, client, muted, audioRecorder]);
+
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.srcObject = activeVideoStream;
+    }
+
+    let timeoutId = -1;
+
+    function sendVideoFrame() {
+      const video = videoRef.current;
+      const canvas = renderCanvasRef.current;
+
+      if (!video || !canvas) {
+        return;
+      }
+
+      const ctx = canvas.getContext("2d")!;
+      canvas.width = video.videoWidth * 0.25;
+      canvas.height = video.videoHeight * 0.25;
+      if (canvas.width + canvas.height > 0) {
+        ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+        const base64 = canvas.toDataURL("image/jpeg", 1.0);
+        const data = base64.slice(base64.indexOf(",") + 1, Infinity);
+        client.sendRealtimeInput([{ mimeType: "image/jpeg", data }]);
+      }
+      if (connected) {
+        timeoutId = window.setTimeout(sendVideoFrame, 1000 / 0.5);
+      }
+    }
+    if (connected && activeVideoStream !== null) {
+      requestAnimationFrame(sendVideoFrame);
+    }
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, [connected, activeVideoStream, client, videoRef]);
+
+  //handler for swapping from one video-stream to the next
+  const changeStreams = (next?: UseMediaStreamResult) => async () => {
+    if (next) {
+      const mediaStream = await next.start();
+      setActiveVideoStream(mediaStream);
+      onVideoStreamChange(mediaStream);
+    } else {
+      setActiveVideoStream(null);
+      onVideoStreamChange(null);
+    }
+
+    videoStreams.filter((msr) => msr !== next).forEach((msr) => msr.stop());
+  };
+
+  return (
+    <section className="control-tray">
+      <canvas style={{ display: "none" }} ref={renderCanvasRef} />
+      <nav className={cn("actions-nav", { disabled: !connected })}>
+        <button
+          className={cn("action-button mic-button")}
+          onClick={() => setMuted(!muted)}
+        >
+          {!muted ? (
+            <span className="material-symbols-outlined filled">mic</span>
+          ) : (
+            <span className="material-symbols-outlined filled">mic_off</span>
+          )}
+        </button>
+
+        <div className="action-button no-action outlined">
+          <AudioPulse volume={volume} active={connected} hover={false} />
+        </div>
+
+        {supportsVideo && (
+          <>
+            <MediaStreamButton
+              isStreaming={screenCapture.isStreaming}
+              start={changeStreams(screenCapture)}
+              stop={changeStreams()}
+              onIcon="cancel_presentation"
+              offIcon="present_to_all"
+            />
+            <MediaStreamButton
+              isStreaming={webcam.isStreaming}
+              start={changeStreams(webcam)}
+              stop={changeStreams()}
+              onIcon="videocam_off"
+              offIcon="videocam"
+            />
+          </>
+        )}
+        {children}
+      </nav>
+
+      <div className={cn("connection-container", { connected })}>
+        <div className="connection-button-container">
+          <button
+            ref={connectButtonRef}
+            className={cn("action-button connect-toggle", { connected })}
+            onClick={connected ? disconnect : connect}
+          >
+            <span className="material-symbols-outlined filled">
+              {connected ? "pause" : "play_arrow"}
+            </span>
+          </button>
+        </div>
+        <span className="text-indicator">Streaming</span>
+      </div>
+    </section>
+  );
+}
+
+export default memo(ControlTray);
+
+================
+File: src/lib/multimodal-live-client.ts
+================
+/**
+ * Copyright 2024 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import { Content, GenerativeContentBlob, Part } from "@google/generative-ai";
+import { EventEmitter } from "eventemitter3";
+import { difference } from "lodash";
+import {
+  ClientContentMessage,
+  isInterrupted,
+  isModelTurn,
+  isServerContenteMessage,
+  isSetupCompleteMessage,
+  isToolCallCancellationMessage,
+  isToolCallMessage,
+  isTurnComplete,
+  LiveIncomingMessage,
+  ModelTurn,
+  RealtimeInputMessage,
+  ServerContent,
+  SetupMessage,
+  StreamingLog,
+  ToolCall,
+  ToolCallCancellation,
+  ToolResponseMessage,
+  type LiveConfig,
+} from "../multimodal-live-types";
+import { blobToJSON, base64ToArrayBuffer } from "./utils";
+
+/**
+ * the events that this client will emit
+ */
+interface MultimodalLiveClientEventTypes {
+  open: () => void;
+  log: (log: StreamingLog) => void;
+  close: (event: CloseEvent) => void;
+  audio: (data: ArrayBuffer) => void;
+  content: (data: ServerContent) => void;
+  interrupted: () => void;
+  setupcomplete: () => void;
+  turncomplete: () => void;
+  toolcall: (toolCall: ToolCall) => void;
+  toolcallcancellation: (toolcallCancellation: ToolCallCancellation) => void;
+}
+
+export type MultimodalLiveAPIClientConnection = {
+  url?: string;
+  apiKey: string;
+};
+
+/**
+ * A event-emitting class that manages the connection to the websocket and emits
+ * events to the rest of the application.
+ * If you dont want to use react you can still use this.
+ */
+export class MultimodalLiveClient extends EventEmitter<MultimodalLiveClientEventTypes> {
+  public ws: WebSocket | null = null;
+  protected config: LiveConfig | null = null;
+  public url: string = "";
+  public getConfig() {
+    return { ...this.config };
+  }
+
+  constructor({ url, apiKey }: MultimodalLiveAPIClientConnection) {
+    super();
+    url =
+      url ||
+      `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent`;
+    url += `?key=${apiKey}`;
+    this.url = url;
+    this.send = this.send.bind(this);
+  }
+
+  log(type: string, message: StreamingLog["message"]) {
+    const log: StreamingLog = {
+      date: new Date(),
+      type,
+      message,
+    };
+    this.emit("log", log);
+  }
+
+  connect(config: LiveConfig): Promise<boolean> {
+    this.config = config;
+
+    const ws = new WebSocket(this.url);
+
+    ws.addEventListener("message", async (evt: MessageEvent) => {
+      if (evt.data instanceof Blob) {
+        this.receive(evt.data);
+      } else {
+        console.log("non blob message", evt);
+      }
+    });
+    return new Promise((resolve, reject) => {
+      const onError = (ev: Event) => {
+        this.disconnect(ws);
+        const message = `Could not connect to "${this.url}"`;
+        this.log(`server.${ev.type}`, message);
+        reject(new Error(message));
+      };
+      ws.addEventListener("error", onError);
+      ws.addEventListener("open", (ev: Event) => {
+        if (!this.config) {
+          reject("Invalid config sent to `connect(config)`");
+          return;
+        }
+        this.log(`client.${ev.type}`, `connected to socket`);
+        this.emit("open");
+
+        this.ws = ws;
+
+        const setupMessage: SetupMessage = {
+          setup: this.config,
+        };
+        this._sendDirect(setupMessage);
+        this.log("client.send", "setup");
+
+        ws.removeEventListener("error", onError);
+        ws.addEventListener("close", (ev: CloseEvent) => {
+          console.log(ev);
+          this.disconnect(ws);
+          let reason = ev.reason || "";
+          if (reason.toLowerCase().includes("error")) {
+            const prelude = "ERROR]";
+            const preludeIndex = reason.indexOf(prelude);
+            if (preludeIndex > 0) {
+              reason = reason.slice(
+                preludeIndex + prelude.length + 1,
+                Infinity,
+              );
+            }
+          }
+          this.log(
+            `server.${ev.type}`,
+            `disconnected ${reason ? `with reason: ${reason}` : ``}`,
+          );
+          this.emit("close", ev);
+        });
+        resolve(true);
+      });
+    });
+  }
+
+  disconnect(ws?: WebSocket) {
+    // could be that this is an old websocket and theres already a new instance
+    // only close it if its still the correct reference
+    if ((!ws || this.ws === ws) && this.ws) {
+      this.ws.close();
+      this.ws = null;
+      this.log("client.close", `Disconnected`);
+      return true;
+    }
+    return false;
+  }
+
+  protected async receive(blob: Blob) {
+    const response: LiveIncomingMessage = (await blobToJSON(
+      blob,
+    )) as LiveIncomingMessage;
+    if (isToolCallMessage(response)) {
+      this.log("server.toolCall", response);
+      this.emit("toolcall", response.toolCall);
+      return;
+    }
+    if (isToolCallCancellationMessage(response)) {
+      this.log("receive.toolCallCancellation", response);
+      this.emit("toolcallcancellation", response.toolCallCancellation);
+      return;
+    }
+
+    if (isSetupCompleteMessage(response)) {
+      this.log("server.send", "setupComplete");
+      this.emit("setupcomplete");
+      return;
+    }
+
+    // this json also might be `contentUpdate { interrupted: true }`
+    // or contentUpdate { end_of_turn: true }
+    if (isServerContenteMessage(response)) {
+      const { serverContent } = response;
+      if (isInterrupted(serverContent)) {
+        this.log("receive.serverContent", "interrupted");
+        this.emit("interrupted");
+        return;
+      }
+      if (isTurnComplete(serverContent)) {
+        this.log("server.send", "turnComplete");
+        this.emit("turncomplete");
+        //plausible theres more to the message, continue
+      }
+
+      if (isModelTurn(serverContent)) {
+        let parts: Part[] = serverContent.modelTurn.parts;
+
+        // when its audio that is returned for modelTurn
+        const audioParts = parts.filter(
+          (p) => p.inlineData && p.inlineData.mimeType.startsWith("audio/pcm"),
+        );
+        const base64s = audioParts.map((p) => p.inlineData?.data);
+
+        // strip the audio parts out of the modelTurn
+        const otherParts = difference(parts, audioParts);
+        // console.log("otherParts", otherParts);
+
+        base64s.forEach((b64) => {
+          if (b64) {
+            const data = base64ToArrayBuffer(b64);
+            this.emit("audio", data);
+            this.log(`server.audio`, `buffer (${data.byteLength})`);
+          }
+        });
+        if (!otherParts.length) {
+          return;
+        }
+
+        parts = otherParts;
+
+        const content: ModelTurn = { modelTurn: { parts } };
+        this.emit("content", content);
+        this.log(`server.content`, response);
+      }
+    } else {
+      console.log("received unmatched message", response);
+    }
+  }
+
+  /**
+   * send realtimeInput, this is base64 chunks of "audio/pcm" and/or "image/jpg"
+   */
+  sendRealtimeInput(chunks: GenerativeContentBlob[]) {
+    let hasAudio = false;
+    let hasVideo = false;
+    for (let i = 0; i < chunks.length; i++) {
+      const ch = chunks[i];
+      if (ch.mimeType.includes("audio")) {
+        hasAudio = true;
+      }
+      if (ch.mimeType.includes("image")) {
+        hasVideo = true;
+      }
+      if (hasAudio && hasVideo) {
+        break;
+      }
+    }
+    const message =
+      hasAudio && hasVideo
+        ? "audio + video"
+        : hasAudio
+          ? "audio"
+          : hasVideo
+            ? "video"
+            : "unknown";
+
+    const data: RealtimeInputMessage = {
+      realtimeInput: {
+        mediaChunks: chunks,
+      },
+    };
+    this._sendDirect(data);
+    this.log(`client.realtimeInput`, message);
+  }
+
+  /**
+   *  send a response to a function call and provide the id of the functions you are responding to
+   */
+  sendToolResponse(toolResponse: ToolResponseMessage["toolResponse"]) {
+    const message: ToolResponseMessage = {
+      toolResponse,
+    };
+
+    this._sendDirect(message);
+    this.log(`client.toolResponse`, message);
+  }
+
+  /**
+   * send normal content parts such as { text }
+   */
+  send(parts: Part | Part[], turnComplete: boolean = true) {
+    parts = Array.isArray(parts) ? parts : [parts];
+    const content: Content = {
+      role: "user",
+      parts,
+    };
+
+    const clientContentRequest: ClientContentMessage = {
+      clientContent: {
+        turns: [content],
+        turnComplete,
+      },
+    };
+
+    this._sendDirect(clientContentRequest);
+    this.log(`client.send`, clientContentRequest);
+  }
+
+  /**
+   *  used internally to send all messages
+   *  don't use directly unless trying to send an unsupported message type
+   */
+  _sendDirect(request: object) {
+    if (!this.ws) {
+      throw new Error("WebSocket is not connected");
+    }
+    const str = JSON.stringify(request);
+    this.ws.send(str);
+  }
+}
+
+================
+File: src/lib/utils.ts
+================
+/**
+ * Copyright 2024 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+export type GetAudioContextOptions = AudioContextOptions & {
+  id?: string;
+};
+
+const map: Map<string, AudioContext> = new Map();
+
+export const audioContext: (
+  options?: GetAudioContextOptions,
+) => Promise<AudioContext> = (() => {
+  const didInteract = new Promise((res) => {
+    window.addEventListener("pointerdown", res, { once: true });
+    window.addEventListener("keydown", res, { once: true });
+  });
+
+  return async (options?: GetAudioContextOptions) => {
+    try {
+      const a = new Audio();
+      a.src =
+        "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA";
+      await a.play();
+      if (options?.id && map.has(options.id)) {
+        const ctx = map.get(options.id);
+        if (ctx) {
+          return ctx;
+        }
+      }
+      const ctx = new AudioContext(options);
+      if (options?.id) {
+        map.set(options.id, ctx);
+      }
+      return ctx;
+    } catch (e) {
+      await didInteract;
+      if (options?.id && map.has(options.id)) {
+        const ctx = map.get(options.id);
+        if (ctx) {
+          return ctx;
+        }
+      }
+      const ctx = new AudioContext(options);
+      if (options?.id) {
+        map.set(options.id, ctx);
+      }
+      return ctx;
+    }
+  };
+})();
+
+export const blobToJSON = (blob: Blob) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (reader.result) {
+        const json = JSON.parse(reader.result as string);
+        resolve(json);
+      } else {
+        reject("oops");
+      }
+    };
+    reader.readAsText(blob);
+  });
+
+export function base64ToArrayBuffer(base64: string) {
+  var binaryString = atob(base64);
+  var bytes = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes.buffer;
+}
+
+================
+File: src/lib/audio-streamer.ts
+================
+/**
+ * Copyright 2024 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import {
+  createWorketFromSrc,
+  registeredWorklets,
+} from "./audioworklet-registry";
+
+export class AudioStreamer {
+  public audioQueue: Float32Array[] = [];
+  private isPlaying: boolean = false;
+  private sampleRate: number = 24000;
+  private bufferSize: number = 7680;
+  private processingBuffer: Float32Array = new Float32Array(0);
+  private scheduledTime: number = 0;
+  public gainNode: GainNode;
+  public source: AudioBufferSourceNode;
+  private isStreamComplete: boolean = false;
+  private checkInterval: number | null = null;
+  private initialBufferTime: number = 0.1; //0.1 // 100ms initial buffer
+  private endOfQueueAudioSource: AudioBufferSourceNode | null = null;
+
+  public onComplete = () => {};
+
+  constructor(public context: AudioContext) {
+    this.gainNode = this.context.createGain();
+    this.source = this.context.createBufferSource();
+    this.gainNode.connect(this.context.destination);
+    this.addPCM16 = this.addPCM16.bind(this);
+  }
+
+  async addWorklet<T extends (d: any) => void>(
+    workletName: string,
+    workletSrc: string,
+    handler: T,
+  ): Promise<this> {
+    let workletsRecord = registeredWorklets.get(this.context);
+    if (workletsRecord && workletsRecord[workletName]) {
+      // the worklet already exists on this context
+      // add the new handler to it
+      workletsRecord[workletName].handlers.push(handler);
+      return Promise.resolve(this);
+      //throw new Error(`Worklet ${workletName} already exists on context`);
+    }
+
+    if (!workletsRecord) {
+      registeredWorklets.set(this.context, {});
+      workletsRecord = registeredWorklets.get(this.context)!;
+    }
+
+    // create new record to fill in as becomes available
+    workletsRecord[workletName] = { handlers: [handler] };
+
+    const src = createWorketFromSrc(workletName, workletSrc);
+    await this.context.audioWorklet.addModule(src);
+    const worklet = new AudioWorkletNode(this.context, workletName);
+
+    //add the node into the map
+    workletsRecord[workletName].node = worklet;
+
+    return this;
+  }
+
+  addPCM16(chunk: Uint8Array) {
+    const float32Array = new Float32Array(chunk.length / 2);
+    const dataView = new DataView(chunk.buffer);
+
+    for (let i = 0; i < chunk.length / 2; i++) {
+      try {
+        const int16 = dataView.getInt16(i * 2, true);
+        float32Array[i] = int16 / 32768;
+      } catch (e) {
+        console.error(e);
+        // console.log(
+        //   `dataView.length: ${dataView.byteLength},  i * 2: ${i * 2}`,
+        // );
+      }
+    }
+
+    const newBuffer = new Float32Array(
+      this.processingBuffer.length + float32Array.length,
+    );
+    newBuffer.set(this.processingBuffer);
+    newBuffer.set(float32Array, this.processingBuffer.length);
+    this.processingBuffer = newBuffer;
+
+    while (this.processingBuffer.length >= this.bufferSize) {
+      const buffer = this.processingBuffer.slice(0, this.bufferSize);
+      this.audioQueue.push(buffer);
+      this.processingBuffer = this.processingBuffer.slice(this.bufferSize);
+    }
+
+    if (!this.isPlaying) {
+      this.isPlaying = true;
+      // Initialize scheduledTime only when we start playing
+      this.scheduledTime = this.context.currentTime + this.initialBufferTime;
+      this.scheduleNextBuffer();
+    }
+  }
+
+  private createAudioBuffer(audioData: Float32Array): AudioBuffer {
+    const audioBuffer = this.context.createBuffer(
+      1,
+      audioData.length,
+      this.sampleRate,
+    );
+    audioBuffer.getChannelData(0).set(audioData);
+    return audioBuffer;
+  }
+
+  private scheduleNextBuffer() {
+    const SCHEDULE_AHEAD_TIME = 0.2;
+
+    while (
+      this.audioQueue.length > 0 &&
+      this.scheduledTime < this.context.currentTime + SCHEDULE_AHEAD_TIME
+    ) {
+      const audioData = this.audioQueue.shift()!;
+      const audioBuffer = this.createAudioBuffer(audioData);
+      const source = this.context.createBufferSource();
+
+      if (this.audioQueue.length === 0) {
+        if (this.endOfQueueAudioSource) {
+          this.endOfQueueAudioSource.onended = null;
+        }
+        this.endOfQueueAudioSource = source;
+        source.onended = () => {
+          if (
+            !this.audioQueue.length &&
+            this.endOfQueueAudioSource === source
+          ) {
+            this.endOfQueueAudioSource = null;
+            this.onComplete();
+          }
+        };
+      }
+
+      source.buffer = audioBuffer;
+      source.connect(this.gainNode);
+
+      const worklets = registeredWorklets.get(this.context);
+
+      if (worklets) {
+        Object.entries(worklets).forEach(([workletName, graph]) => {
+          const { node, handlers } = graph;
+          if (node) {
+            source.connect(node);
+            node.port.onmessage = function (ev: MessageEvent) {
+              handlers.forEach((handler) => {
+                handler.call(node.port, ev);
+              });
+            };
+            node.connect(this.context.destination);
+          }
+        });
+      }
+
+      // i added this trying to fix clicks
+      // this.gainNode.gain.setValueAtTime(0, 0);
+      // this.gainNode.gain.linearRampToValueAtTime(1, 1);
+
+      // Ensure we never schedule in the past
+      const startTime = Math.max(this.scheduledTime, this.context.currentTime);
+      source.start(startTime);
+
+      this.scheduledTime = startTime + audioBuffer.duration;
+    }
+
+    if (this.audioQueue.length === 0 && this.processingBuffer.length === 0) {
+      if (this.isStreamComplete) {
+        this.isPlaying = false;
+        if (this.checkInterval) {
+          clearInterval(this.checkInterval);
+          this.checkInterval = null;
+        }
+      } else {
+        if (!this.checkInterval) {
+          this.checkInterval = window.setInterval(() => {
+            if (
+              this.audioQueue.length > 0 ||
+              this.processingBuffer.length >= this.bufferSize
+            ) {
+              this.scheduleNextBuffer();
+            }
+          }, 100) as unknown as number;
+        }
+      }
+    } else {
+      const nextCheckTime =
+        (this.scheduledTime - this.context.currentTime) * 1000;
+      setTimeout(
+        () => this.scheduleNextBuffer(),
+        Math.max(0, nextCheckTime - 50),
+      );
+    }
+  }
+
+  stop() {
+    this.isPlaying = false;
+    this.isStreamComplete = true;
+    this.audioQueue = [];
+    this.processingBuffer = new Float32Array(0);
+    this.scheduledTime = this.context.currentTime;
+
+    if (this.checkInterval) {
+      clearInterval(this.checkInterval);
+      this.checkInterval = null;
+    }
+
+    this.gainNode.gain.linearRampToValueAtTime(
+      0,
+      this.context.currentTime + 0.1,
+    );
+
+    setTimeout(() => {
+      this.gainNode.disconnect();
+      this.gainNode = this.context.createGain();
+      this.gainNode.connect(this.context.destination);
+    }, 200);
+  }
+
+  async resume() {
+    if (this.context.state === "suspended") {
+      await this.context.resume();
+    }
+    this.isStreamComplete = false;
+    this.scheduledTime = this.context.currentTime + this.initialBufferTime;
+    this.gainNode.gain.setValueAtTime(1, this.context.currentTime);
+  }
+
+  complete() {
+    this.isStreamComplete = true;
+    if (this.processingBuffer.length > 0) {
+      this.audioQueue.push(this.processingBuffer);
+      this.processingBuffer = new Float32Array(0);
+      if (this.isPlaying) {
+        this.scheduleNextBuffer();
+      }
+    } else {
+      this.onComplete();
+    }
+  }
+}
+
+// // Usage example:
+// const audioStreamer = new AudioStreamer();
+//
+// // In your streaming code:
+// function handleChunk(chunk: Uint8Array) {
+//   audioStreamer.handleChunk(chunk);
+// }
+//
+// // To start playing (call this in response to a user interaction)
+// await audioStreamer.resume();
+//
+// // To stop playing
+// // audioStreamer.stop();
+
+================
+File: src/lib/audioworklet-registry.ts
+================
+/**
+ * Copyright 2024 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/**
+ * A registry to map attached worklets by their audio-context
+ * any module using `audioContext.audioWorklet.addModule(` should register the worklet here
+ */
+export type WorkletGraph = {
+  node?: AudioWorkletNode;
+  handlers: Array<(this: MessagePort, ev: MessageEvent) => any>;
+};
+
+export const registeredWorklets: Map<
+  AudioContext,
+  Record<string, WorkletGraph>
+> = new Map();
+
+export const createWorketFromSrc = (
+  workletName: string,
+  workletSrc: string,
+) => {
+  const script = new Blob(
+    [`registerProcessor("${workletName}", ${workletSrc})`],
+    {
+      type: "application/javascript",
+    },
+  );
+
+  return URL.createObjectURL(script);
+};
+
+================
+File: src/lib/store-logger.ts
+================
+/**
+ * Copyright 2024 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import { create } from "zustand";
+import { StreamingLog } from "../multimodal-live-types";
+import { mockLogs } from "../components/logger/mock-logs";
+
+interface StoreLoggerState {
+  maxLogs: number;
+  logs: StreamingLog[];
+  log: (streamingLog: StreamingLog) => void;
+  clearLogs: () => void;
+}
+
+export const useLoggerStore = create<StoreLoggerState>((set, get) => ({
+  maxLogs: 500,
+  logs: [], //mockLogs,
+  log: ({ date, type, message }: StreamingLog) => {
+    set((state) => {
+      const prevLog = state.logs.at(-1);
+      if (prevLog && prevLog.type === type && prevLog.message === message) {
+        return {
+          logs: [
+            ...state.logs.slice(0, -1),
+            {
+              date,
+              type,
+              message,
+              count: prevLog.count ? prevLog.count + 1 : 1,
+            } as StreamingLog,
+          ],
+        };
+      }
+      return {
+        logs: [
+          ...state.logs.slice(-(get().maxLogs - 1)),
+          {
+            date,
+            type,
+            message,
+          } as StreamingLog,
+        ],
+      };
+    });
+  },
+
+  clearLogs: () => {
+    console.log("clear log");
+    set({ logs: [] });
+  },
+  setMaxLogs: (n: number) => set({ maxLogs: n }),
+}));
+
+================
+File: src/lib/audio-recorder.ts
+================
+/**
+ * Copyright 2024 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import { audioContext } from "./utils";
+import AudioRecordingWorklet from "./worklets/audio-processing";
+import VolMeterWorket from "./worklets/vol-meter";
+
+import { createWorketFromSrc } from "./audioworklet-registry";
+import EventEmitter from "eventemitter3";
+
+function arrayBufferToBase64(buffer: ArrayBuffer) {
+  var binary = "";
+  var bytes = new Uint8Array(buffer);
+  var len = bytes.byteLength;
+  for (var i = 0; i < len; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return window.btoa(binary);
+}
+
+export class AudioRecorder extends EventEmitter {
+  stream: MediaStream | undefined;
+  audioContext: AudioContext | undefined;
+  source: MediaStreamAudioSourceNode | undefined;
+  recording: boolean = false;
+  recordingWorklet: AudioWorkletNode | undefined;
+  vuWorklet: AudioWorkletNode | undefined;
+
+  private starting: Promise<void> | null = null;
+
+  constructor(public sampleRate = 16000) {
+    super();
+  }
+
+  async start() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      throw new Error("Could not request user media");
+    }
+
+    this.starting = new Promise(async (resolve, reject) => {
+      this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      this.audioContext = await audioContext({ sampleRate: this.sampleRate });
+      this.source = this.audioContext.createMediaStreamSource(this.stream);
+
+      const workletName = "audio-recorder-worklet";
+      const src = createWorketFromSrc(workletName, AudioRecordingWorklet);
+
+      await this.audioContext.audioWorklet.addModule(src);
+      this.recordingWorklet = new AudioWorkletNode(
+        this.audioContext,
+        workletName,
+      );
+
+      this.recordingWorklet.port.onmessage = async (ev: MessageEvent) => {
+        // worklet processes recording floats and messages converted buffer
+        const arrayBuffer = ev.data.data.int16arrayBuffer;
+
+        if (arrayBuffer) {
+          const arrayBufferString = arrayBufferToBase64(arrayBuffer);
+          this.emit("data", arrayBufferString);
+        }
+      };
+      this.source.connect(this.recordingWorklet);
+
+      // vu meter worklet
+      const vuWorkletName = "vu-meter";
+      await this.audioContext.audioWorklet.addModule(
+        createWorketFromSrc(vuWorkletName, VolMeterWorket),
+      );
+      this.vuWorklet = new AudioWorkletNode(this.audioContext, vuWorkletName);
+      this.vuWorklet.port.onmessage = (ev: MessageEvent) => {
+        this.emit("volume", ev.data.volume);
+      };
+
+      this.source.connect(this.vuWorklet);
+      this.recording = true;
+      resolve();
+      this.starting = null;
+    });
+  }
+
+  stop() {
+    // its plausible that stop would be called before start completes
+    // such as if the websocket immediately hangs up
+    const handleStop = () => {
+      this.source?.disconnect();
+      this.stream?.getTracks().forEach((track) => track.stop());
+      this.stream = undefined;
+      this.recordingWorklet = undefined;
+      this.vuWorklet = undefined;
+    };
+    if (this.starting) {
+      this.starting.then(handleStop);
+      return;
+    }
+    handleStop();
+  }
+}
+
+================
+File: src/lib/worklets/audio-processing.ts
+================
+/**
+ * Copyright 2024 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+const AudioRecordingWorklet = `
+class AudioProcessingWorklet extends AudioWorkletProcessor {
+
+  // send and clear buffer every 2048 samples, 
+  // which at 16khz is about 8 times a second
+  buffer = new Int16Array(2048);
+
+  // current write index
+  bufferWriteIndex = 0;
+
+  constructor() {
+    super();
+    this.hasAudio = false;
+  }
+
+  /**
+   * @param inputs Float32Array[][] [input#][channel#][sample#] so to access first inputs 1st channel inputs[0][0]
+   * @param outputs Float32Array[][]
+   */
+  process(inputs) {
+    if (inputs[0].length) {
+      const channel0 = inputs[0][0];
+      this.processChunk(channel0);
+    }
+    return true;
+  }
+
+  sendAndClearBuffer(){
+    this.port.postMessage({
+      event: "chunk",
+      data: {
+        int16arrayBuffer: this.buffer.slice(0, this.bufferWriteIndex).buffer,
+      },
+    });
+    this.bufferWriteIndex = 0;
+  }
+
+  processChunk(float32Array) {
+    const l = float32Array.length;
+    
+    for (let i = 0; i < l; i++) {
+      // convert float32 -1 to 1 to int16 -32768 to 32767
+      const int16Value = float32Array[i] * 32768;
+      this.buffer[this.bufferWriteIndex++] = int16Value;
+      if(this.bufferWriteIndex >= this.buffer.length) {
+        this.sendAndClearBuffer();
+      }
+    }
+
+    if(this.bufferWriteIndex >= this.buffer.length) {
+      this.sendAndClearBuffer();
+    }
+  }
+}
+`;
+
+export default AudioRecordingWorklet;
+
+================
+File: src/lib/worklets/vol-meter.ts
+================
+/**
+ * Copyright 2024 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+const VolMeterWorket = `
+  class VolMeter extends AudioWorkletProcessor {
+    volume
+    updateIntervalInMS
+    nextUpdateFrame
+
+    constructor() {
+      super()
+      this.volume = 0
+      this.updateIntervalInMS = 25
+      this.nextUpdateFrame = this.updateIntervalInMS
+      this.port.onmessage = event => {
+        if (event.data.updateIntervalInMS) {
+          this.updateIntervalInMS = event.data.updateIntervalInMS
+        }
+      }
+    }
+
+    get intervalInFrames() {
+      return (this.updateIntervalInMS / 1000) * sampleRate
+    }
+
+    process(inputs) {
+      const input = inputs[0]
+
+      if (input.length > 0) {
+        const samples = input[0]
+        let sum = 0
+        let rms = 0
+
+        for (let i = 0; i < samples.length; ++i) {
+          sum += samples[i] * samples[i]
+        }
+
+        rms = Math.sqrt(sum / samples.length)
+        this.volume = Math.max(rms, this.volume * 0.7)
+
+        this.nextUpdateFrame -= samples.length
+        if (this.nextUpdateFrame < 0) {
+          this.nextUpdateFrame += this.intervalInFrames
+          this.port.postMessage({volume: this.volume})
+        }
+      }
+
+      return true
+    }
+  }`;
+
+export default VolMeterWorket;
