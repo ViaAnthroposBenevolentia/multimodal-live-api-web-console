@@ -1,136 +1,142 @@
 :root {
-    --primary-color: #4285f4;
-    --secondary-color: #34a853;
-    --error-color: #ea4335;
-    --background-color: #f8f9fa;
-    --text-color: #202124;
+  --primary-color: #4285f4;
+  --secondary-color: #34a853;
+  --error-color: #ea4335;
+  --background-color: #f8f9fa;
+  --text-color: #202124;
 }
 
 * {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
 }
 
 body {
-    font-family: Arial, sans-serif;
-    background-color: var(--background-color);
-    color: var(--text-color);
+  font-family: Arial, sans-serif;
+  background-color: var(--background-color);
+  color: var(--text-color);
 }
 
 .container {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 20px;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
 }
 
 header {
-    text-align: center;
-    margin-bottom: 30px;
+  text-align: center;
+  margin-bottom: 30px;
 }
 
 .media-container {
-    background-color: white;
-    border-radius: 8px;
-    padding: 20px;
-    margin-bottom: 20px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  background-color: white;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 #videoElement {
-    width: 100%;
-    max-width: 640px;
-    margin: 0 auto;
-    display: block;
-    background-color: #eee;
-    border-radius: 4px;
+  width: 100%;
+  max-width: 640px;
+  margin: 0 auto;
+  display: block;
+  background-color: #eee;
+  border-radius: 4px;
 }
 
 .audio-visualizer {
-    position: relative;
-    height: 60px;
-    background-color: #eee;
-    margin-top: 20px;
-    border-radius: 4px;
-    overflow: hidden;
+  position: relative;
+  height: 60px;
+  background-color: #eee;
+  margin-top: 20px;
+  border-radius: 4px;
+  overflow: hidden;
 }
 
 .audio-visualizer::after {
-    content: '';
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    width: 100%;
-    height: var(--volume-height, 0%);
-    background-color: var(--primary-color);
-    transition: height 0.1s ease;
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: var(--volume-height, 0%);
+  background-color: var(--primary-color);
+  transition: height 0.1s ease;
 }
 
 .controls {
-    display: flex;
-    gap: 10px;
-    justify-content: center;
-    margin-bottom: 20px;
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin-bottom: 20px;
 }
 
 .btn {
-    padding: 10px 20px;
-    border: none;
-    border-radius: 4px;
-    background-color: var(--primary-color);
-    color: white;
-    cursor: pointer;
-    transition: background-color 0.3s;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 4px;
+  background-color: var(--primary-color);
+  color: white;
+  cursor: pointer;
+  transition: background-color 0.3s;
 }
 
 .btn:hover {
-    background-color: #3367d6;
+  background-color: #3367d6;
 }
 
 .btn .icon {
-    font-size: 1.2em;
+  font-size: 1.2em;
 }
 
 .status-container {
-    display: flex;
-    justify-content: center;
-    gap: 20px;
+  display: flex;
+  justify-content: center;
+  gap: 20px;
 }
 
 .status {
-    padding: 8px 16px;
-    border-radius: 4px;
-    background-color: white;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  padding: 8px 16px;
+  border-radius: 4px;
+  background-color: white;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 /* States */
 .connected {
-    color: var(--secondary-color);
+  color: var(--secondary-color);
 }
 
 .disconnected {
-    color: var(--error-color);
+  color: var(--error-color);
 }
 
 .streaming {
-    animation: pulse 2s infinite;
+  animation: pulse 2s infinite;
 }
 
 @keyframes pulse {
-    0% { opacity: 1; }
-    50% { opacity: 0.6; }
-    100% { opacity: 1; }
-} 
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+  100% {
+    opacity: 1;
+  }
+}
 
 .btn.active {
-    background-color: var(--secondary-color);
+  background-color: var(--secondary-color);
 }
 
 .btn.connect {
-    background-color: var(--secondary-color);
+  background-color: var(--secondary-color);
 }
 
 .btn.disconnect {
-    background-color: var(--error-color);
+  background-color: var(--error-color);
 }
