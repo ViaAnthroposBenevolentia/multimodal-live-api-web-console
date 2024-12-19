@@ -30,6 +30,11 @@ class GeminiWebClient {
     this.audioQueue = [];
     this.isPlayingAudio = false;
 
+    // Add audio context and gain node for better control
+    this.audioContext = null;
+    this.gainNode = null;
+    this.currentSource = null;
+
     this.videoStreamer = new VideoStreamer({
       targetFPS: 20,
       quality: 0.5,
@@ -210,6 +215,9 @@ class GeminiWebClient {
     this.stopAudioRecording();
     this.stopVideoStream(false);
     this.stopVideoStream(true);
+
+    // Stop any playing audio
+    this.stopCurrentAudio();
   }
 
   setControlsEnabled(enabled) {
@@ -368,8 +376,23 @@ class GeminiWebClient {
 
     // If not already playing, start playing
     if (!this.isPlayingAudio) {
-      this.playNextInQueue();
+      await this.playNextInQueue();
     }
+  }
+
+  stopCurrentAudio() {
+    if (this.currentSource) {
+      try {
+        this.currentSource.stop();
+        this.currentSource.disconnect();
+      } catch (e) {
+        console.log('Audio source already stopped');
+      }
+      this.currentSource = null;
+    }
+    // Clear the queue
+    this.audioQueue = [];
+    this.isPlayingAudio = false;
   }
 
   async playNextInQueue() {
@@ -383,8 +406,9 @@ class GeminiWebClient {
 
     try {
       if (!this.audioContext) {
-        this.audioContext = new (window.AudioContext ||
-          window.webkitAudioContext)();
+        this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        this.gainNode = this.audioContext.createGain();
+        this.gainNode.connect(this.audioContext.destination);
       }
 
       // Check if we need to convert PCM data
@@ -392,48 +416,46 @@ class GeminiWebClient {
       let audioBuffer;
 
       if (isPCM) {
-        // Convert PCM16 data to AudioBuffer
+        // Optimize PCM conversion
         const pcmData = new Int16Array(arrayBuffer);
-        const floatData = new Float32Array(pcmData.length);
-
-        // Convert Int16 to Float32
+        audioBuffer = this.audioContext.createBuffer(1, pcmData.length, 24000);
+        const channelData = audioBuffer.getChannelData(0);
+        
+        // Optimized conversion loop
         for (let i = 0; i < pcmData.length; i++) {
-          floatData[i] = pcmData[i] / 32768.0;
+          channelData[i] = pcmData[i] / 32768.0;
         }
-
-        audioBuffer = this.audioContext.createBuffer(
-          1,
-          floatData.length,
-          24000
-        );
-        audioBuffer.getChannelData(0).set(floatData);
       } else {
         audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
       }
 
+      // Wait for any current playback to finish
+      if (this.currentSource) {
+        await new Promise(resolve => {
+          const oldSource = this.currentSource;
+          oldSource.onended = resolve;
+        });
+      }
+
       // Create and configure source
-      const source = this.audioContext.createBufferSource();
-      source.buffer = audioBuffer;
-      source.connect(this.audioContext.destination);
+      this.currentSource = this.audioContext.createBufferSource();
+      this.currentSource.buffer = audioBuffer;
+      this.currentSource.connect(this.gainNode);
 
       // When this chunk ends, play the next one
-      source.onended = () => {
-        console.log("Finished playing audio chunk");
-        this.playNextInQueue();
+      this.currentSource.onended = () => {
+        this.currentSource = null;
+        // Use setTimeout to prevent potential stack overflow
+        setTimeout(() => this.playNextInQueue(), 0);
       };
 
       // Play the audio
-      source.start(0);
-
-      console.log(
-        "Playing audio chunk of size:",
-        arrayBuffer.byteLength,
-        "bytes"
-      );
+      this.currentSource.start(0);
     } catch (error) {
       console.error("Error playing audio:", error);
+      this.currentSource = null;
       // If there's an error, try to continue with the next chunk
-      this.playNextInQueue();
+      setTimeout(() => this.playNextInQueue(), 0);
     }
   }
 

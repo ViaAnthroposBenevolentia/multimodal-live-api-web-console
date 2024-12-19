@@ -1,11 +1,14 @@
 class AudioRecorderProcessor extends AudioWorkletProcessor {
     constructor() {
         super();
-        this.bufferSize = 2048;
+        this.bufferSize = 1024;
         this.buffer = new Float32Array(this.bufferSize);
         this.bufferIndex = 0;
         this.lastVolumeUpdate = 0;
-        this.sampleRate = 16000; // Match the sample rate from AudioRecorder
+        this.sampleRate = 16000;
+        
+        this.volumeSmoothing = 0.8;
+        this.smoothedVolume = 0;
     }
 
     process(inputs, outputs, parameters) {
@@ -14,18 +17,18 @@ class AudioRecorderProcessor extends AudioWorkletProcessor {
 
         const samples = input[0];
         
-        // Calculate volume
         let sum = 0;
         for (let i = 0; i < samples.length; i++) {
-            sum += samples[i] * samples[i];
+            const sample = samples[i];
+            sum += sample * sample;
             
-            this.buffer[this.bufferIndex++] = samples[i];
+            this.buffer[this.bufferIndex++] = sample;
             
             if (this.bufferIndex >= this.bufferSize) {
-                // Convert to 16-bit PCM
                 const pcmBuffer = new Int16Array(this.bufferSize);
                 for (let j = 0; j < this.bufferSize; j++) {
-                    pcmBuffer[j] = Math.max(-1, Math.min(1, this.buffer[j])) * 0x7FFF;
+                    pcmBuffer[j] = Math.max(-32768, Math.min(32767, 
+                        Math.floor(this.buffer[j] * 32768)));
                 }
                 
                 this.port.postMessage({
@@ -37,15 +40,15 @@ class AudioRecorderProcessor extends AudioWorkletProcessor {
             }
         }
 
-        // Calculate current time from frame count
+        const currentRms = Math.sqrt(sum / samples.length);
+        this.smoothedVolume = this.volumeSmoothing * this.smoothedVolume + 
+            (1 - this.volumeSmoothing) * currentRms;
+
         const currentTime = currentFrame / this.sampleRate;
-        
-        // Send volume updates less frequently (every 100ms)
         if (currentTime - this.lastVolumeUpdate > 0.1) {
-            const rms = Math.sqrt(sum / samples.length);
             this.port.postMessage({
                 type: 'volume',
-                volume: rms
+                volume: this.smoothedVolume
             });
             this.lastVolumeUpdate = currentTime;
         }
