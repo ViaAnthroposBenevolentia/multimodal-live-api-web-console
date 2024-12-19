@@ -1,24 +1,8 @@
-<context>
-The task: You will outline a series of incremental milestones and related troubleshooting steps for implementing a minimal web client that interfaces with the new Gemini 2.0 Flash Multimodal Live API. This web client will be built using only vanilla JavaScript, HTML, and CSS, plus only minimal, lightweight external libraries if absolutely necessary. The final code will connect to the Multimodal Live API over a websocket, handle both audio and video data streams in real-time, and provide a simple UI (e.g., start/stop streaming, audio volume visualization).
+The task: You should start implementing a minimal web client that interfaces with the new Gemini 2.0 Flash Multimodal Live API. This web client will be built using only vanilla JavaScript, HTML, and CSS, plus minimal, lightweight external libraries. The final code will connect to the Multimodal Live API over a websocket, handle both audio and video data streams in real-time, and provide a simple UI (e.g., start/stop streaming, audio volume visualization).
 
 Constraints and objectives:
 - No complex frameworks like React; just vanilla JS/HTML/CSS.
 - Only small, minimal libraries if needed (e.g., a lightweight websocket helper).
-- Clearly separate the project into well-defined milestones.
-- Each milestone must include a goal and detailed instructions on what needs to be implemented.
-- Each milestone must include troubleshooting steps for potential common issues.
-- Do not provide full code now; only the plan.
-- Aim for a final plan that is ready to follow step-by-step.
-
-End-state:
-A final, structured prompt response that presents:
-1. A list of milestones in a logical build order.
-2. For each milestone, a brief explanation of what to implement.
-3. Troubleshooting tips for each milestone.
-
-No assumptions, no code — only the final structured plan.
-</context>
-
-<request>
-Produce the milestone-based implementation plan with troubleshooting steps exactly as specified.
-</request>
+- Clearly separate the core functions and components to different files and folders (pwd in src folder).
+- Each function must include troubleshooting steps for potential common issues.
+- Use CoT for the best results.
