@@ -126,3 +126,11 @@ header {
 .btn.active {
     background-color: var(--secondary-color);
 }
+
+.btn.connect {
+    background-color: var(--secondary-color);
+}
+
+.btn.disconnect {
+    background-color: var(--error-color);
+}

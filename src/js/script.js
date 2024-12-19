@@ -10,7 +10,7 @@ class GeminiWebClient {
     this.cameraBtn = document.getElementById("cameraBtn");
     this.screenShareBtn = document.getElementById("screenShareBtn");
     this.connectionStatus = document.getElementById("connectionStatus");
-    this.streamStatus = document.getElementById("streamStatus");
+    this.streamStatus = null;
 
     this.apiKey = config.GEMINI_API_KEY;
     if (!this.apiKey) {
@@ -56,6 +56,7 @@ class GeminiWebClient {
     });
 
     this.initializeEventListeners();
+    this.updateConnectButton();
   }
 
   initializeEventListeners() {
@@ -199,7 +200,6 @@ class GeminiWebClient {
     this.isConnected = false;
     this.isStreaming = false;
     this.updateStatus();
-    // Disable media controls
     this.setControlsEnabled(false);
   }
 
@@ -208,15 +208,11 @@ class GeminiWebClient {
     this.isStreaming = false;
     this.ws = null;
     this.updateStatus();
-    // Disable media controls
     this.setControlsEnabled(false);
 
-    // Stop all streams
     this.stopAudioRecording();
     this.stopVideoStream(false);
     this.stopVideoStream(true);
-
-    // Stop any playing audio
     this.stopCurrentAudio();
   }
 
@@ -269,12 +265,7 @@ class GeminiWebClient {
       ? "status connected"
       : "status disconnected";
 
-    this.streamStatus.textContent = this.isStreaming
-      ? "Streaming"
-      : "Not Streaming";
-    this.streamStatus.className = this.isStreaming
-      ? "status streaming"
-      : "status";
+    this.updateConnectButton();
   }
 
   async startAudioRecording() {
@@ -386,7 +377,7 @@ class GeminiWebClient {
         this.currentSource.stop();
         this.currentSource.disconnect();
       } catch (e) {
-        console.log('Audio source already stopped');
+        console.log("Audio source already stopped");
       }
       this.currentSource = null;
     }
@@ -406,7 +397,8 @@ class GeminiWebClient {
 
     try {
       if (!this.audioContext) {
-        this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        this.audioContext = new (window.AudioContext ||
+          window.webkitAudioContext)();
         this.gainNode = this.audioContext.createGain();
         this.gainNode.connect(this.audioContext.destination);
       }
@@ -420,7 +412,7 @@ class GeminiWebClient {
         const pcmData = new Int16Array(arrayBuffer);
         audioBuffer = this.audioContext.createBuffer(1, pcmData.length, 24000);
         const channelData = audioBuffer.getChannelData(0);
-        
+
         // Optimized conversion loop
         for (let i = 0; i < pcmData.length; i++) {
           channelData[i] = pcmData[i] / 32768.0;
@@ -431,7 +423,7 @@ class GeminiWebClient {
 
       // Wait for any current playback to finish
       if (this.currentSource) {
-        await new Promise(resolve => {
+        await new Promise((resolve) => {
           const oldSource = this.currentSource;
           oldSource.onended = resolve;
         });
@@ -466,6 +458,12 @@ class GeminiWebClient {
       bytes[i] = binaryString.charCodeAt(i);
     }
     return bytes.buffer;
+  }
+
+  updateConnectButton() {
+    this.connectBtn.textContent = this.isConnected ? "Disconnect" : "Connect";
+    this.connectBtn.classList.toggle("connect", !this.isConnected);
+    this.connectBtn.classList.toggle("disconnect", this.isConnected);
   }
 }
 
