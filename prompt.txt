@@ -1,8 +1,15 @@
-The task: You should start implementing a minimal web client that interfaces with the new Gemini 2.0 Flash Multimodal Live API. This web client will be built using only vanilla JavaScript, HTML, and CSS, plus minimal, lightweight external libraries. The final code will connect to the Multimodal Live API over a websocket, handle both audio and video data streams in real-time, and provide a simple UI (e.g., start/stop streaming, audio volume visualization).
+The task: You should start implementing a minimal web client that interfaces with the new Gemini 2.0 Flash Multimodal Live API. This web client will be built using only vanilla JavaScript, HTML, and CSS, plus minimal, lightweight external libraries. The final code will connect to the Multimodal Live API over a websocket, handle both audio and video data streams in real-time, and provide a simple UI 
 
-Constraints and objectives:
+<constraints>
 - No complex frameworks like React; just vanilla JS/HTML/CSS.
 - Only small, minimal libraries if needed (e.g., a lightweight websocket helper).
-- Clearly separate the core functions and components to different files and folders (pwd in src folder).
-- Each function must include troubleshooting steps for potential common issues.
+- Separate code into different files and folders (pwd is src folder).
+</constraints>
+
+<instructions>
+- Keep the code clean and modular. 
 - Use CoT for the best results.
+- Ensure that the demo has a log window (with beautifully formatted logs with emojies), send text field, turn on/off mic button that also acts as a input sound visualizer.
+- Later, we can implement a video streamer and screen sharing.
+- Ensure that the demo also keeps the conversation history.
+</instructions> 
