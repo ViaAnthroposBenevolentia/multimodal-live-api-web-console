@@ -1,5 +1,6 @@
 import config from "./config.js";
 import AudioRecorder from "./audio/audio-recorder.js";
+import { VideoStreamer } from "./video/video-streamer.js";
 
 class GeminiWebClient {
   constructor() {
@@ -28,6 +29,26 @@ class GeminiWebClient {
     // Add audio queue management
     this.audioQueue = [];
     this.isPlayingAudio = false;
+
+    this.videoStreamer = new VideoStreamer({
+      targetFPS: 20,
+      quality: 0.5,
+      onFrame: (buffer) => {
+        if (this.isConnected) {
+          const base64Data = this.arrayBufferToBase64(buffer);
+          this.sendMessage({
+            realtimeInput: {
+              mediaChunks: [
+                {
+                  mimeType: "image/jpeg",
+                  data: base64Data,
+                },
+              ],
+            },
+          });
+        }
+      },
+    });
 
     this.initializeEventListeners();
   }
@@ -141,10 +162,13 @@ class GeminiWebClient {
     } else if (message.serverContent) {
       const { serverContent } = message;
       if (serverContent.modelTurn && serverContent.modelTurn.parts) {
-        console.log("Received model turn parts:", serverContent.modelTurn.parts);
+        console.log(
+          "Received model turn parts:",
+          serverContent.modelTurn.parts
+        );
         // Only process the first audio part to avoid duplicates
-        const audioPart = serverContent.modelTurn.parts.find(
-          part => part.inlineData?.mimeType.startsWith("audio/")
+        const audioPart = serverContent.modelTurn.parts.find((part) =>
+          part.inlineData?.mimeType.startsWith("audio/")
         );
         if (audioPart?.inlineData) {
           console.log("Processing audio part:", audioPart.inlineData.mimeType);
@@ -294,7 +318,7 @@ class GeminiWebClient {
       }
 
       this.videoElement.srcObject = stream;
-      this.startVideoFrameCapture(stream);
+      this.videoStreamer.start(this.videoElement);
     } catch (error) {
       console.error(
         `Failed to start ${isScreenShare ? "screen" : "video"} stream:`,
@@ -307,6 +331,8 @@ class GeminiWebClient {
     const stream = isScreenShare ? this.screenStream : this.videoStream;
     if (stream) {
       stream.getTracks().forEach((track) => track.stop());
+      this.videoStreamer.stop();
+
       if (isScreenShare) {
         this.screenStream = null;
         this.screenShareBtn.classList.remove("active");
@@ -319,48 +345,6 @@ class GeminiWebClient {
         this.videoElement.srcObject = null;
       }
     }
-  }
-
-  startVideoFrameCapture(stream) {
-    const canvas = document.createElement("canvas");
-    const ctx = canvas.getContext("2d");
-    const captureInterval = 200; // Capture every 200ms
-
-    const captureFrame = () => {
-      if (!stream.active) return;
-
-      canvas.width = this.videoElement.videoWidth;
-      canvas.height = this.videoElement.videoHeight;
-      ctx.drawImage(this.videoElement, 0, 0, canvas.width, canvas.height);
-
-      canvas.toBlob(
-        (blob) => {
-          if (blob && this.isConnected) {
-            blob.arrayBuffer().then((buffer) => {
-              const base64Data = this.arrayBufferToBase64(buffer);
-              this.sendMessage({
-                realtimeInput: {
-                  mediaChunks: [
-                    {
-                      mimeType: "image/jpeg",
-                      data: base64Data,
-                    },
-                  ],
-                },
-              });
-            });
-          }
-        },
-        "image/jpeg",
-        0.7
-      );
-
-      setTimeout(captureFrame, captureInterval);
-    };
-
-    this.videoElement.onloadedmetadata = () => {
-      captureFrame();
-    };
   }
 
   updateAudioVisualizer(volume) {
@@ -381,7 +365,7 @@ class GeminiWebClient {
   async playAudioBuffer(arrayBuffer) {
     // Add to queue
     this.audioQueue.push(arrayBuffer);
-    
+
     // If not already playing, start playing
     if (!this.isPlayingAudio) {
       this.playNextInQueue();
